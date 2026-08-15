@@ -1,0 +1,6 @@
+{
+  "name": "Spidey Jersey DTF Pro",
+  "description": "Professional DTF Gang Sheet & Custom Jersey Print Automation Platform with 2D Warped Vector Engine, Roster CSV Importer, 300 DPI PDF & ZIP Exporter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,13 @@
+name = "spidet-jersey-dtf"
+compatibility_date = "2026-03-01"
+main = "src/worker.ts"
+assets = { directory = "./dist", binding = "ASSETS" }
+
+[[d1_databases]]
+binding = "MY_DB"
+database_name = "spideydtf"
+database_id = "d85fd385-d742-1a58-e875-749d7724b37b"
+
+[[r2_buckets]]
+binding = "MY_BUCKET"
+bucket_name = "test-upload-bucket"
