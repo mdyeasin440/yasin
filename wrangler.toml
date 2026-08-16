@@ -1,13 +1,16 @@
-name = "spidet-jersey-dtf"
+name = "yasin"
 compatibility_date = "2026-03-01"
 main = "src/worker.ts"
 assets = { directory = "./dist", binding = "ASSETS" }
 
-[[d1_databases]]
-binding = "MY_DB"
-database_name = "spideydtf"
-database_id = "d85fd385-d742-1a58-e875-749d7724b37b"
+# D1 Database binding (Uncomment & replace with your real database_id from Cloudflare D1 Dashboard)
+# [[d1_databases]]
+# binding = "MY_DB"
+# database_name = "spideydtf-db"
+# database_id = "YOUR_REAL_D1_DATABASE_UUID"
 
-[[r2_buckets]]
-binding = "MY_BUCKET"
-bucket_name = "test-upload-bucket"
+# R2 Storage Bucket (Optional, bind in Cloudflare Dashboard -> Settings -> Bindings)
+# [[r2_buckets]]
+# binding = "MY_BUCKET"
+# bucket_name = "dtftest"
+

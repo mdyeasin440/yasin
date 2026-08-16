@@ -37,7 +37,9 @@ export interface ExecutionContext {
 
 export interface Env {
   MY_DB?: D1Database;
+  DB?: D1Database;
   MY_BUCKET?: R2Bucket;
+  BUCKET?: R2Bucket;
   ASSETS?: Fetcher;
   GEMINI_API_KEY?: string;
 }
@@ -67,8 +69,8 @@ export default {
             status: 'ok',
             service: 'Spidey Jersey DTF Pro Backend',
             version: '2.0.0',
-            d1_ready: Boolean(env.MY_DB),
-            r2_ready: Boolean(env.MY_BUCKET),
+            d1_ready: Boolean(env.MY_DB || env.DB),
+            r2_ready: Boolean(env.MY_BUCKET || env.BUCKET),
             timestamp: new Date().toISOString(),
           },
           corsHeaders
@@ -125,7 +127,7 @@ async function handlePresetsRoute(
   method: string,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
-  const db = env.MY_DB;
+  const db = env.MY_DB || env.DB;
 
   if (method === 'GET') {
     if (db) {
@@ -166,7 +168,7 @@ async function handleOrdersRoute(
   method: string,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
-  const db = env.MY_DB;
+  const db = env.MY_DB || env.DB;
 
   if (method === 'POST' && pathname === '/api/orders/bulk') {
     const body: any = await request.json();
@@ -237,7 +239,7 @@ async function handleAssetsRoute(
   method: string,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
-  const bucket = env.MY_BUCKET;
+  const bucket = env.MY_BUCKET || env.BUCKET;
   const key = pathname.replace('/api/assets/', '');
 
   if (!bucket) {
