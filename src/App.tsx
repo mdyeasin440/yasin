@@ -119,6 +119,29 @@ export default function App() {
     await ApiService.savePreset(updatedPreset);
   }, []);
 
+  const handleDuplicatePreset = useCallback(async (preset: DesignPreset) => {
+    const newPreset: DesignPreset = {
+      ...preset,
+      id: `preset-${Date.now()}`,
+      code: `${preset.code || 'CUSTOM'}-COPY`,
+      name: `${preset.name || 'Custom Preset'} (Copy)`,
+      isDefault: false,
+    };
+    setPresets(prev => [newPreset, ...prev]);
+    await ApiService.savePreset(newPreset);
+  }, []);
+
+  const handleDeletePreset = useCallback(async (id: string) => {
+    if (presets.length <= 1) {
+      alert('You must keep at least one active design preset.');
+      return;
+    }
+    if (confirm('Delete this design preset?')) {
+      setPresets(prev => prev.filter(p => p.id !== id));
+      await ApiService.deletePreset(id);
+    }
+  }, [presets.length]);
+
   const handleCreateNewPreset = useCallback(() => {
     const newPreset: DesignPreset = {
       id: `preset-${Date.now()}`,
@@ -196,6 +219,8 @@ export default function App() {
             setPresets={setPresets}
             onEditPreset={(p) => setEditingPreset(p)}
             onCreateNewPreset={handleCreateNewPreset}
+            onDuplicatePreset={handleDuplicatePreset}
+            onDeletePreset={handleDeletePreset}
           />
         )}
 

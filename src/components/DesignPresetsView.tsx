@@ -23,13 +23,16 @@ interface DesignPresetsViewProps {
   setPresets: React.Dispatch<React.SetStateAction<DesignPreset[]>>;
   onEditPreset: (preset: DesignPreset) => void;
   onCreateNewPreset: () => void;
+  onDuplicatePreset: (preset: DesignPreset) => void;
+  onDeletePreset: (id: string) => void;
 }
 
 export const DesignPresetsView: React.FC<DesignPresetsViewProps> = ({
   presets,
-  setPresets,
   onEditPreset,
   onCreateNewPreset,
+  onDuplicatePreset,
+  onDeletePreset,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLeague, setSelectedLeague] = useState('ALL');
@@ -65,27 +68,6 @@ export const DesignPresetsView: React.FC<DesignPresetsViewProps> = ({
       return matchesSearch && matchesLeague;
     });
   }, [presets, searchQuery, selectedLeague]);
-
-  const handleDuplicatePreset = (preset: DesignPreset) => {
-    const newPreset: DesignPreset = {
-      ...preset,
-      id: `preset-${Date.now()}`,
-      code: `${preset.code || 'CUSTOM'}-COPY`,
-      name: `${preset.name || 'Custom Preset'} (Copy)`,
-      isDefault: false,
-    };
-    setPresets(prev => [newPreset, ...prev]);
-  };
-
-  const handleDeletePreset = (id: string) => {
-    if (presets.length <= 1) {
-      alert('You must keep at least one active design preset.');
-      return;
-    }
-    if (confirm('Delete this design preset?')) {
-      setPresets(prev => prev.filter(p => p.id !== id));
-    }
-  };
 
   return (
     <div className="space-y-4 max-w-[1700px] mx-auto">
@@ -255,7 +237,7 @@ export const DesignPresetsView: React.FC<DesignPresetsViewProps> = ({
                 </button>
 
                 <button
-                  onClick={() => handleDuplicatePreset(preset)}
+                  onClick={() => onDuplicatePreset(preset)}
                   className="p-1.5 rounded bg-[#161822] hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition cursor-pointer"
                   title="Clone / Duplicate Preset"
                 >
@@ -263,7 +245,7 @@ export const DesignPresetsView: React.FC<DesignPresetsViewProps> = ({
                 </button>
 
                 <button
-                  onClick={() => handleDeletePreset(preset.id)}
+                  onClick={() => onDeletePreset(preset.id)}
                   className="p-1.5 rounded bg-[#161822] hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-700 transition cursor-pointer"
                   title="Delete Preset"
                 >
