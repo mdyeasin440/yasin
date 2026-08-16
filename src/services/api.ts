@@ -14,19 +14,28 @@ export const ApiService = {
    * Load presets (tries worker API first, falls back to LocalStorage & defaults)
    */
   async getPresets(): Promise<DesignPreset[]> {
+    let cloudPresets: DesignPreset[] = [];
     try {
       const res = await fetch('/api/presets');
       if (res.ok) {
         const data = await res.json();
-        if (data.presets && data.presets.length > 0) {
-          const parsed = data.presets.map((p: any) =>
+        if (data.presets && Array.isArray(data.presets) && data.presets.length > 0) {
+          cloudPresets = data.presets.map((p: any) =>
             typeof p.config_json === 'string' ? JSON.parse(p.config_json) : p
           );
-          return parsed;
         }
       }
     } catch (e) {
-      // Offline / dev fallback
+      console.warn('Cloudflare D1 fetch error / offline:', e);
+    }
+
+    if (cloudPresets.length > 0) {
+      // Merge cloud presets with default presets so user gets both their custom saved presets and the defaults
+      const cloudIds = new Set(cloudPresets.map(p => p.id));
+      const remainingDefaults = DEFAULT_DESIGN_PRESETS.filter(p => !cloudIds.has(p.id));
+      const combined = [...cloudPresets, ...remainingDefaults];
+      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(combined));
+      return combined;
     }
 
     const localData = localStorage.getItem(PRESETS_STORAGE_KEY);
@@ -64,13 +73,16 @@ export const ApiService = {
 
     // 2. Try worker API
     try {
-      await fetch('/api/presets', {
+      const res = await fetch('/api/presets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(preset),
       });
+      if (res.ok) {
+        console.log('Successfully synced preset to Cloudflare D1');
+      }
     } catch (e) {
-      // Background sync fail silent
+      console.warn('Background sync failed:', e);
     }
 
     return true;
@@ -83,6 +95,15 @@ export const ApiService = {
     const current = await this.getPresets();
     const filtered = current.filter(p => p.id !== presetId);
     localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(filtered));
+
+    try {
+      await fetch(`/api/presets?id=${encodeURIComponent(presetId)}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      console.warn('Backend delete sync failed:', e);
+    }
+
     return true;
   },
 

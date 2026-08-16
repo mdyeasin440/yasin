@@ -120,6 +120,36 @@ function jsonResponse(data: any, corsHeaders: Record<string, string> = {}, statu
 }
 
 // Handlers
+async function ensureDbSchema(db: D1Database): Promise<void> {
+  try {
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS design_presets (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          code TEXT,
+          sport TEXT DEFAULT 'soccer',
+          category TEXT DEFAULT 'custom',
+          description TEXT,
+          config_json TEXT,
+          is_default INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`
+      )
+      .run();
+
+    // Ensure config_json column exists if table was created with an older schema
+    try {
+      await db.prepare(`ALTER TABLE design_presets ADD COLUMN config_json TEXT`).run();
+    } catch {
+      // Column already exists
+    }
+  } catch (err) {
+    console.error('DB Schema ensure error:', err);
+  }
+}
+
 async function handlePresetsRoute(
   request: Request,
   env: Env,
@@ -131,8 +161,28 @@ async function handlePresetsRoute(
 
   if (method === 'GET') {
     if (db) {
-      const results = await db.prepare('SELECT * FROM design_presets ORDER BY is_default DESC, updated_at DESC').all();
-      return jsonResponse({ success: true, presets: results.results }, corsHeaders);
+      try {
+        await ensureDbSchema(db);
+        const results = await db
+          .prepare('SELECT * FROM design_presets ORDER BY is_default DESC, updated_at DESC')
+          .all();
+        
+        const list = (results.results || []).map((row: any) => {
+          if (row.config_json) {
+            try {
+              const parsed = JSON.parse(row.config_json);
+              return { ...parsed, id: row.id || parsed.id };
+            } catch {
+              return row;
+            }
+          }
+          return row;
+        });
+
+        return jsonResponse({ success: true, presets: list }, corsHeaders);
+      } catch (err: any) {
+        return jsonResponse({ success: false, error: err.message, presets: [] }, corsHeaders);
+      }
     }
     return jsonResponse({ success: true, presets: [], message: 'D1 not bound; using client cache' }, corsHeaders);
   }
@@ -141,21 +191,54 @@ async function handlePresetsRoute(
     const body: any = await request.json();
     const id = body.id || `preset_${Date.now()}`;
     const name = body.name || 'Custom Preset';
-    const sport = body.sport || 'baseball';
+    const code = body.code || id;
+    const sport = body.sport || 'soccer';
     const category = body.category || 'custom';
     const description = body.description || '';
     const configJson = JSON.stringify(body);
 
     if (db) {
-      await db
-        .prepare(
-          'INSERT OR REPLACE INTO design_presets (id, name, sport, category, description, config_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)'
-        )
-        .bind(id, name, sport, category, description, configJson)
-        .run();
+      try {
+        await ensureDbSchema(db);
+        await db
+          .prepare(
+            `INSERT INTO design_presets (id, name, code, sport, category, description, config_json, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               code = excluded.code,
+               sport = excluded.sport,
+               category = excluded.category,
+               description = excluded.description,
+               config_json = excluded.config_json,
+               updated_at = CURRENT_TIMESTAMP`
+          )
+          .bind(id, name, code, sport, category, description, configJson)
+          .run();
+      } catch (err: any) {
+        console.error('Failed to save to D1:', err);
+        return jsonResponse({ success: false, error: err.message }, corsHeaders, 500);
+      }
     }
 
     return jsonResponse({ success: true, id, message: 'Preset saved successfully' }, corsHeaders);
+  }
+
+  if (method === 'DELETE') {
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id') || pathname.replace('/api/presets/', '');
+
+    if (db && id) {
+      try {
+        await ensureDbSchema(db);
+        await db.prepare('DELETE FROM design_presets WHERE id = ?').bind(id).run();
+      } catch (err: any) {
+        console.error('Failed to delete from D1:', err);
+        return jsonResponse({ success: false, error: err.message }, corsHeaders, 500);
+      }
+    }
+
+    return jsonResponse({ success: true, message: 'Preset deleted' }, corsHeaders);
   }
 
   return new Response('Method not allowed', { status: 405, headers: corsHeaders });
