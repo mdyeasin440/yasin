@@ -4,59 +4,70 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { DesignPreset, ParsedOrderItem, PackedItem, GangSheetConfig, GangSheetResult } from './types/dtf';
+import { DEFAULT_DESIGN_PRESETS } from './utils/defaultPresets';
+import { parseOrderTextLines, generatePrintElementsFromParsedOrders, packGangSheet } from './utils/packer';
+import { loadGoogleFonts } from './utils/fonts';
+import { ApiService, CloudStatus } from './services/api';
+
 import { Header, ActiveNavTab } from './components/Header';
 import { BulkOrdersView } from './components/BulkOrdersView';
 import { NestingCanvasView } from './components/NestingCanvasView';
 import { DesignPresetsView } from './components/DesignPresetsView';
-import { EditPresetModal } from './components/EditPresetModal';
 import { ExportView } from './components/ExportView';
-import {
-  DesignPreset,
-  ParsedOrderItem,
-  PackedItem,
-  GangSheetConfig,
-  GangSheetResult,
-} from './types/dtf';
-import {
-  DEFAULT_DESIGN_PRESETS,
-  SAMPLE_ORDER_TEXT_1,
-} from './utils/defaultPresets';
-import { loadGoogleFonts } from './utils/fonts';
-import {
-  parseOrderTextLines,
-  generatePrintElementsFromParsedOrders,
-  packGangSheet,
-} from './utils/packer';
-import { ApiService } from './services/api';
+import { EditPresetModal } from './components/EditPresetModal';
 
-export default function App() {
+const INITIAL_SAMPLE_ORDER_TEXT = `YASIN / 7 / L / TEAM TH / FRONT
+MESSI / 10 / M / BARCELONA 2016-17
+RONALDO / 7 / XL / REAL MADRID 2014-15
+KAKA / 22 / M / AC MILAN CLASSIC 2007
+BENZEMA / 9 / L / REAL MADRID 2023-24
+PEDRI / 8 / S / BARCELONA 2023-24
+SAKA / 7 / M / ARSENAL 2023-24
+SALAH / 11 / L / LIVERPOOL 2023-24
+HAALAND / 9 / XL / MAN CITY 2023-24
+MBAPPE / 7 / M / PSG 2023-24`;
+
+export function App() {
+  // Navigation
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('bulk_orders');
-  const [presets, setPresets] = useState<DesignPreset[]>(DEFAULT_DESIGN_PRESETS);
-  const [orderText, setOrderText] = useState<string>(SAMPLE_ORDER_TEXT_1);
-  const [globalSizePreset, setGlobalSizePreset] = useState<'Adult' | 'Youth' | 'Infant'>('Adult');
-  const [editingPreset, setEditingPreset] = useState<DesignPreset | null>(null);
 
-  // Gang sheet configuration (Default 39" roll width & 0.10" gap)
+  // Core Data
+  const [orderText, setOrderText] = useState<string>(INITIAL_SAMPLE_ORDER_TEXT);
+  const [presets, setPresets] = useState<DesignPreset[]>(DEFAULT_DESIGN_PRESETS);
+  const [editingPreset, setEditingPreset] = useState<DesignPreset | null>(null);
+  const [globalSizePreset, setGlobalSizePreset] = useState<string>('ADULT_STANDARD');
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus>({
+    d1Connected: false,
+    presetCount: 0,
+    r2Connected: false,
+    status: 'local_only',
+  });
+
+  // Nesting Sheet Engine Configuration (39" Roll Standard)
   const [gangConfig, setGangConfig] = useState<GangSheetConfig>({
     rollWidthInches: 39.0,
-    gapInches: 0.10,
+    gapInches: 0.375,
     marginInches: 0.25,
-    allowRotation: false,
-    sequenceMode: 'row_names_numbers',
-    showCutLines: true,
-    showItemLabels: true,
-    showJobHeader: true,
-    filmType: 'cold_peel_matte',
+    maxSheetLengthInches: 120.0,
+    allowRotation: true,
+    sortStrategy: 'HEIGHT_DESC',
   });
 
   // Custom packed items on canvas
   const [canvasItems, setCanvasItems] = useState<PackedItem[]>([]);
   const [isManualCanvasEdited, setIsManualCanvasEdited] = useState<boolean>(false);
 
-  // Load fonts and stored presets
+  // Load fonts, cloud status, and stored presets
   useEffect(() => {
     loadGoogleFonts();
 
+    // Check Cloud connection
+    ApiService.checkCloudStatus().then(status => {
+      setCloudStatus(status);
+    });
+
+    // Fetch presets from Cloud / Storage
     ApiService.getPresets().then(loaded => {
       if (loaded && loaded.length > 0) {
         setPresets(loaded);
@@ -117,6 +128,7 @@ export default function App() {
     });
     setEditingPreset(null);
     await ApiService.savePreset(updatedPreset);
+    ApiService.checkCloudStatus().then(setCloudStatus);
   }, []);
 
   const handleDuplicatePreset = useCallback(async (preset: DesignPreset) => {
@@ -129,6 +141,7 @@ export default function App() {
     };
     setPresets(prev => [newPreset, ...prev]);
     await ApiService.savePreset(newPreset);
+    ApiService.checkCloudStatus().then(setCloudStatus);
   }, []);
 
   const handleDeletePreset = useCallback(async (id: string) => {
@@ -139,6 +152,7 @@ export default function App() {
     if (confirm('Delete this design preset?')) {
       setPresets(prev => prev.filter(p => p.id !== id));
       await ApiService.deletePreset(id);
+      ApiService.checkCloudStatus().then(setCloudStatus);
     }
   }, [presets.length]);
 
@@ -169,6 +183,12 @@ export default function App() {
     setEditingPreset(newPreset);
   }, [presets.length]);
 
+  const handleSyncAllToCloud = useCallback(async () => {
+    await ApiService.syncAllPresetsToCloud(presets);
+    const status = await ApiService.checkCloudStatus();
+    setCloudStatus(status);
+  }, [presets]);
+
   return (
     <div className="min-h-screen bg-[#07080C] text-slate-200 flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
       
@@ -179,6 +199,8 @@ export default function App() {
         orderCount={parsedOrders.length}
         presetCount={presets.length}
         gangSheetResult={autoGangResult}
+        cloudStatus={cloudStatus}
+        onSyncAllToCloud={handleSyncAllToCloud}
       />
 
       {/* Main App Workspace */}
@@ -236,7 +258,7 @@ export default function App() {
 
       </main>
 
-      {/* Edit Preset Modal (Screenshot 4) */}
+      {/* Edit Preset Modal */}
       {editingPreset && (
         <EditPresetModal
           preset={editingPreset}
@@ -256,9 +278,10 @@ export default function App() {
             <span className="text-emerald-400 font-bold">READY AT 300 DPI</span>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-slate-500">
-            <span>D1: spideydtf.db</span>
-            <span>R2: dtf-bucket-assets</span>
-            <span>v2.4.0-pro</span>
+            <span className="text-blue-400 font-semibold">
+              {cloudStatus.d1Connected ? '● Cloud D1 Database: Connected' : '○ Offline / Local Mode'}
+            </span>
+            <span>v2.5.0-pro</span>
           </div>
         </div>
       </footer>
@@ -266,3 +289,5 @@ export default function App() {
     </div>
   );
 }
+
+export default App;

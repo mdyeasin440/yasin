@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Printer,
   FileText,
@@ -11,10 +11,14 @@ import {
   Sparkles,
   Download,
   Paperclip,
-  Percent,
   Clock,
+  Cloud,
+  RefreshCw,
+  Check,
+  Database,
 } from 'lucide-react';
 import { GangSheetResult } from '../types/dtf';
+import { CloudStatus } from '../services/api';
 
 export type ActiveNavTab = 'bulk_orders' | 'nesting_canvas' | 'design_presets' | 'export_dtf';
 
@@ -24,6 +28,8 @@ interface HeaderProps {
   orderCount: number;
   presetCount: number;
   gangSheetResult: GangSheetResult | null;
+  cloudStatus?: CloudStatus;
+  onSyncAllToCloud?: () => Promise<void>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,7 +38,12 @@ export const Header: React.FC<HeaderProps> = ({
   orderCount,
   presetCount,
   gangSheetResult,
+  cloudStatus,
+  onSyncAllToCloud,
 }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncedJustNow, setSyncedJustNow] = useState(false);
+
   const rollDimensions = gangSheetResult
     ? `${gangSheetResult.rollWidthInches}" x ${gangSheetResult.totalLengthInches}"`
     : '39" x 36.35"';
@@ -44,6 +55,20 @@ export const Header: React.FC<HeaderProps> = ({
   const printTime = gangSheetResult
     ? `~${Math.round(gangSheetResult.estimatedPrintTimeMinutes)}m`
     : '~3m';
+
+  const handleManualSync = async () => {
+    if (!onSyncAllToCloud || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await onSyncAllToCloud();
+      setSyncedJustNow(true);
+      setTimeout(() => setSyncedJustNow(false), 3000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   return (
     <header className="bg-[#0B0C10] border-b border-slate-800/80 sticky top-0 z-50">
@@ -60,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
                 SPIDEY JERSEY
               </h1>
               <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-blue-600/30 text-blue-400 border border-blue-500/30">
-                DTF PRO v2.4
+                DTF PRO v2.5
               </span>
             </div>
             <p className="text-[10px] font-mono text-slate-400 tracking-tight">
@@ -143,9 +168,36 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Right: Roll Stats Indicators */}
+        {/* Right: Roll Stats & Cloud Sync Indicators */}
         <div className="flex items-center gap-2 shrink-0">
           
+          {/* Cloud Sync Button / Badge */}
+          {onSyncAllToCloud && (
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              title="Click to force-sync all local presets & settings to Cloudflare D1"
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono flex items-center gap-1.5 transition cursor-pointer ${
+                syncedJustNow
+                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                  : cloudStatus?.d1Connected
+                  ? 'bg-blue-950/40 border-blue-500/40 text-blue-300 hover:bg-blue-900/50'
+                  : 'bg-[#12131A] border-slate-800 text-slate-400 hover:border-slate-700'
+              }`}
+            >
+              {isSyncing ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
+              ) : syncedJustNow ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <Database className="w-3.5 h-3.5 text-blue-400" />
+              )}
+              <span className="hidden sm:inline font-bold">
+                {isSyncing ? 'Syncing...' : syncedJustNow ? 'Cloud Synced' : 'Cloud Sync'}
+              </span>
+            </button>
+          )}
+
           {/* Dimensions Tag */}
           <div className="bg-[#12131A] border border-slate-800 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-mono">
             <Paperclip className="w-3.5 h-3.5 text-slate-400" />
